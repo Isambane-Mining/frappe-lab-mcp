@@ -40,7 +40,7 @@ The server is its own small OAuth 2.1 authorization server with dynamic client r
 | Code + venv | `/opt/frappe-lab-mcp` | root, read-only to users |
 | Instance policy + secret hash | `/etc/frappe-lab-mcp/instances/<user>.yaml` | `root:<user>` 0640: the connector can read it but **cannot change its own allowlist** |
 | Supervisor program | `/etc/supervisor/conf.d/frappe-lab-mcp-<user>.conf` | runs `frappe-lab-mcp serve` **as `<user>`** |
-| nginx user→port map | `/etc/frappe-lab-mcp/nginx-users.map` | generated; included by the nginx config |
+| nginx per-user locations | `/etc/frappe-lab-mcp/nginx-locations.conf` | generated; one `include` line inside the Virtualmin server block |
 | Optional self-service sudo | `/etc/sudoers.d/frappe-lab-mcp-<user>` | `supervisorctl start/stop/restart/status/tail frappe-lab-mcp-<user>` only |
 | Process log | `/var/log/frappe-lab-mcp/<user>.log` | |
 | Tokens, audit log, bench job logs | `~<user>/.local/state/frappe-lab-mcp/` | user, 0700 |
@@ -53,12 +53,12 @@ sudo $A list                         # instances + supervisor status
 sudo $A rotate-secret juan           # new secret, revokes all of juan's ChatGPT sessions
 sudo $A remove juan                  # stop + unregister (bench untouched)
 sudo $A restart [juan]
-sudo $A nginx-map                    # regenerate map + nginx -t + reload
+sudo $A nginx                        # regenerate locations + nginx -t + reload
 ```
 
 `configure` finds the user's benches and sites and lists their git apps with branches. It suggests apps whose branch matches the username as writable, and offers to either generate a secret (shown once, to pass on privately) or let you type one (hidden). It refuses system accounts and benches the user doesn't own. Rerunning it reconfigures an instance, using the current values as defaults.
 
-One-time nginx: install `deploy/nginx-mcp.isambane.co.za.conf` (set the TLS paths and drop Virtualmin's `/.well-known/` block). After that, `configure`/`remove` keep the map current and reload nginx after `nginx -t` passes.
+One-time nginx: add the directives from `deploy/nginx-mcp.isambane.co.za.conf` inside the Virtualmin server block for the domain (nothing goes in `conf.d` or elsewhere). After that, `configure`/`remove` regenerate the included locations file and reload nginx after `nginx -t` passes.
 
 ChatGPT (workspace admin must allow custom connectors): Settings → Connectors → Create. URL `https://mcp.isambane.co.za/<user>/mcp`, auth OAuth.
 

@@ -6,7 +6,7 @@
 #   sudo deploy/install.sh juan         # install/upgrade, then configure juan
 #
 # Per-user management afterwards:
-#   sudo /opt/frappe-lab-mcp/.venv/bin/frappe-lab-mcp-admin {configure|list|rotate-secret|remove|restart|nginx-map}
+#   sudo /opt/frappe-lab-mcp/.venv/bin/frappe-lab-mcp-admin {configure|list|rotate-secret|remove|restart|nginx}
 set -euo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo" >&2; exit 1; }
@@ -36,8 +36,10 @@ chmod -R go-w "$DEST"
 install -d -m 755 /etc/frappe-lab-mcp
 install -d -m 751 /etc/frappe-lab-mcp/instances
 install -d -m 755 /var/log/frappe-lab-mcp
-[ -f /etc/frappe-lab-mcp/nginx-users.map ] || \
-    printf '# managed by frappe-lab-mcp-admin: <user> <port>;\n' > /etc/frappe-lab-mcp/nginx-users.map
+# must exist before nginx -t, even with no users registered yet
+[ -f /etc/frappe-lab-mcp/nginx-locations.conf ] || \
+    printf '# managed by frappe-lab-mcp-admin\n' > /etc/frappe-lab-mcp/nginx-locations.conf
+rm -f /etc/frappe-lab-mcp/nginx-users.map
 
 ADMIN="$DEST/.venv/bin/frappe-lab-mcp-admin"
 running=$(supervisorctl status 2>/dev/null | awk '/^frappe-lab-mcp-/ {print $1}' || true)

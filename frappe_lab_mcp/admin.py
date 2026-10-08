@@ -1,14 +1,15 @@
 """Root-only administration: register per-developer connector instances.
 
     sudo /opt/frappe-lab-mcp/.venv/bin/frappe-lab-mcp-admin configure [user]
-    sudo ... list | status | remove <user> | rotate-secret <user> | nginx-map | restart [user]
+    sudo ... list | remove <user> | rotate-secret <user> | nginx | restart [user]
 
 Each instance is:
   /etc/frappe-lab-mcp/instances/<user>.yaml       root:<user> 0640 -- policy + secret hash.
                                                   Readable by the process, NOT writable by it,
                                                   so the model cannot widen its own allowlist.
   /etc/supervisor/conf.d/frappe-lab-mcp-<user>.conf   program running AS <user>
-  /etc/frappe-lab-mcp/nginx-users.map             "<user> <port>;" lines, included by nginx
+  /etc/frappe-lab-mcp/nginx-locations.conf        per-user location blocks, included by ONE line
+                                                  inside the mcp.isambane.co.za server block
   /var/log/frappe-lab-mcp/<user>.log              process log
 Runtime state (OAuth tokens, audit log, bench job logs) lives in the user's
 ~/.local/state/frappe-lab-mcp because the process must write it.
@@ -46,7 +47,7 @@ class Paths:
         self.live = root is None
         self.etc = r / "etc/frappe-lab-mcp"
         self.instances = self.etc / "instances"
-        self.nginx_map = self.etc / "nginx-users.map"
+        self.nginx_conf = self.etc / "nginx-locations.conf"
         self.supervisor = r / "etc/supervisor/conf.d"
         self.sudoers = r / "etc/sudoers.d"
         self.logs = r / "var/log/frappe-lab-mcp"
@@ -172,10 +173,23 @@ redirect_stderr=true
 """
 
 
-def write_nginx_map(paths: Paths, instances: dict):
-    lines = ["# managed by frappe-lab-mcp-admin: <user> <port>;"]
-    lines += [f"{u} {int(c['listen_port'])};" for u, c in sorted(instances.items())]
-    write_file(paths.nginx_map, "\n".join(lines) + "\n", 0o644, paths=paths)
+def write_nginx_locations(paths: Paths, instances: dict):
+    """Per-user location blocks. Proxy headers/timeouts are set once in the server block."""
+    out = ["# managed by frappe-lab-mcp-admin -- do not edit; regenerate with `frappe-lab-mcp-admin nginx`"]
+    for u, c in sorted(instances.items()):
+        port = int(c["listen_port"])
+        out.append(f"""
+# {u}
+location ^~ /{u}/ {{
+    proxy_pass http://127.0.0.1:{port}/;
+}}
+location = /.well-known/oauth-protected-resource/{u}/mcp {{
+    proxy_pass http://127.0.0.1:{port};
+}}
+location = /.well-known/oauth-authorization-server/{u} {{
+    proxy_pass http://127.0.0.1:{port}/.well-known/oauth-authorization-server;
+}}""")
+    write_file(paths.nginx_conf, "\n".join(out) + "\n", 0o644, paths=paths)
 
 
 def reload_nginx(paths: Paths):
@@ -337,7 +351,7 @@ def cmd_configure(args, paths: Paths):
         sudo_file.unlink()
 
     instances[user] = cfg
-    write_nginx_map(paths, instances)
+    write_nginx_locations(paths, instances)
 
     # state dir must exist and belong to the user
     state = Path(cfg["state_dir"])
@@ -410,14 +424,14 @@ def cmd_remove(args, paths: Paths):
             p.unlink()
     run(["supervisorctl", "reread"], paths)
     run(["supervisorctl", "update", prog], paths, check=False)
-    write_nginx_map(paths, load_instances(paths))
+    write_nginx_locations(paths, load_instances(paths))
     reload_nginx(paths)
     print(f"Removed {user}.")
 
 
-def cmd_nginx_map(args, paths: Paths):
-    write_nginx_map(paths, load_instances(paths))
-    print(paths.nginx_map.read_text())
+def cmd_nginx(args, paths: Paths):
+    write_nginx_locations(paths, load_instances(paths))
+    print(paths.nginx_conf.read_text())
     reload_nginx(paths)
 
 
@@ -437,7 +451,7 @@ def main(argv=None):
     sub.add_parser("list", help="list instances")
     for name, hlp in (("remove", "unregister a developer"), ("rotate-secret", "new login secret + revoke sessions")):
         sub.add_parser(name, help=hlp).add_argument("user")
-    sub.add_parser("nginx-map", help="regenerate the nginx user map and reload nginx")
+    sub.add_parser("nginx", help="regenerate the nginx location include and reload nginx")
     sub.add_parser("restart", help="restart one or all instances").add_argument("user", nargs="?")
     args = ap.parse_args(argv)
 
@@ -445,7 +459,7 @@ def main(argv=None):
     if paths.live and os.geteuid() != 0:
         die("run as root (sudo)")
     {"configure": cmd_configure, "list": cmd_list, "remove": cmd_remove, "rotate-secret": cmd_rotate_secret,
-     "nginx-map": cmd_nginx_map, "restart": cmd_restart}[args.cmd](args, paths)
+     "nginx": cmd_nginx, "restart": cmd_restart}[args.cmd](args, paths)
 
 
 if __name__ == "__main__":
