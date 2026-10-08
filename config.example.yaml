@@ -1,0 +1,21 @@
+# Instance config format. Installed instances live in /etc/frappe-lab-mcp/instances/<user>.yaml
+# (root:<user> 0640) and are written by `sudo frappe-lab-mcp-admin configure <user>` -- do not
+# hand-edit those. For local development copy this to ./config.yaml (git-ignored) and run
+# `.venv/bin/frappe-lab-mcp --config config.yaml set-secret` then `... serve`.
+user: juan
+public_base_url: https://mcp.isambane.co.za/juan   # connector URL in ChatGPT = this + /mcp
+listen_port: 8711                                   # unique per user; must match the nginx map
+bench_path: /home/juan/juan-bench
+site: juan.isambane.co.za
+
+# app -> branches the connector may write/commit/push on. Everything else is read-only.
+writable:
+  safety: [juan]
+  engineering: [juan]
+
+# Optional:
+# extra_bench_commands: {"reload-doc": true}   # name -> inject --site?
+# disabled_bench_commands: [get-app]
+# access_token_ttl: 28800
+# refresh_token_ttl: 2592000
+# login_secret_hash: set with `frappe-lab-mcp set-secret`

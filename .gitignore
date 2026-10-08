@@ -1,0 +1,40 @@
+# Python / build
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Real instance configs carry login-secret hashes and site details -- never commit them.
+# Only config.example.yaml belongs in git.
+config.yaml
+*.local.yaml
+instances/
+nginx-users.map
+
+# Runtime state: OAuth clients/tokens, audit log, bench job logs
+state/
+oauth.json
+oauth.tmp
+audit.jsonl
+*.log
+
+# Secrets and key material
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*secret*
+!**/*secret*.py
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
